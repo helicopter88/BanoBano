@@ -11,7 +11,7 @@ class Task(@JsonProperty("id") val id: Long, @JsonProperty("type") val type: Str
     }
 
     override fun toString(): String {
-        return BanobanoApplication.mapper.writeValueAsString(this)
+        return BanoBanoApplication.Mapper.writeValueAsString(this)
     }
 
 }

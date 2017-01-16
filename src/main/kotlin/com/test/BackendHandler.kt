@@ -1,7 +1,6 @@
 package com.test
 
 import org.eclipse.jgit.api.Git
-import org.springframework.boot.json.JsonParserFactory
 import org.springframework.stereotype.Controller
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
@@ -13,10 +12,10 @@ import java.util.concurrent.atomic.AtomicInteger
 @Controller
 class BackendHandler : TextWebSocketHandler() {
 
-    private final val MAX_SERVICES = AtomicInteger()
+    private val MAX_SERVICES = AtomicInteger()
     override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val payload = message.payload
-        val m = p.parseMap(payload)
+        val m = jsonParser.parseMap(payload)
         when (m["msg"]) {
             "register" -> registerService(session)
             "job_complete" -> jobComplete(session, payload)
@@ -40,15 +39,15 @@ class BackendHandler : TextWebSocketHandler() {
     }
 
     private fun jobComplete(session: WebSocketSession, message: String) {
-        val m = p.parseMap(message)
+        val m = jsonParser.parseMap(message)
         val id = m["id"]!!.toString().toLong()
         //tasks[id]!!.incrementAndGet() == MAX_SERVICES.get()
     }
 
     companion object {
         private val services = HashMap<String, WebSocketSession>()
-        private val p = JsonParserFactory.getJsonParser()
         private val tasks = HashMap<Long, AtomicInteger>()
+        private val jsonParser = BanoBanoApplication.JsonParser
 
         fun submitTask(task: Task) {
             tasks[task.id] = AtomicInteger(0)
@@ -57,16 +56,24 @@ class BackendHandler : TextWebSocketHandler() {
 
         private fun gitClone(remote: String, pattern: String): String {
             val git = Git.cloneRepository()
-            git.setDirectory(File(pattern).absoluteFile)
-            git.setURI(remote)
-            git.call()
-            return git.repository.directory.absolutePath
+            val dir = File(pattern).absoluteFile
+            dir.mkdir()
+            try {
+                git.setDirectory(dir)
+                        .setURI(remote)
+                        .setNoCheckout(false)
+                        .call()
+                        .close()
+            } catch(e: Throwable) {
+                e.printStackTrace()
+            }
+            return dir.absolutePath
         }
 
         private fun cloneTask(task: Task, session: String): String {
             val name = "$session-${task.id}"
-            val model = gitClone(task.modelGit, name)
-            val students = task.studentGits.map { t -> gitClone(t, name) }
+            val model = gitClone(task.modelGit, "model-$name")
+            val students = task.studentGits.mapIndexed { i, s -> gitClone(s, "s$i-$name") }
 
             return Task(task.id, task.type, model, students.toTypedArray()).toString()
         }
